@@ -2,71 +2,82 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Retro Tetris</title>
-  <meta name="description" content="A nostalgic pixel-art Tetris. Vanilla JS, no build step." />
+  <meta name="description" content="A nostalgic pixel-art Tetris. Vanilla JS, no build step. Tailored layouts for phone, tablet and desktop." />
+  <meta name="theme-color" content="#1a1a1a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Tetris" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' shape-rendering='crispEdges'><rect width='16' height='16' fill='%230f380f'/><rect x='2' y='2' width='4' height='4' fill='%239bbc0f'/><rect x='6' y='2' width='4' height='4' fill='%239bbc0f'/><rect x='6' y='6' width='4' height='4' fill='%239bbc0f'/><rect x='10' y='6' width='4' height='4' fill='%239bbc0f'/></svg>" />
 </head>
 <body>
-  <main class="console">
+  <main class="console" id="console">
     <header class="console__top">
       <h1 class="title">RETRO<span class="title__accent">TETRIS</span></h1>
-      <div class="led" aria-hidden="true"></div>
+      <div class="console__right">
+        <button class="mode-btn" id="mode-btn" type="button" title="Layout: auto / phone / tablet / desktop">AUTO</button>
+        <div class="led" aria-hidden="true"></div>
+      </div>
     </header>
 
     <section class="screen" id="screen">
-      <div class="screen__inner">
-        <aside class="panel panel--left">
-          <div class="panel__box">
-            <div class="panel__label">HOLD</div>
-            <canvas id="hold" width="96" height="96" aria-label="Held piece"></canvas>
-          </div>
-          <div class="panel__box panel__box--fill">
-            <div class="panel__label">HI-SCORE</div>
-            <div class="panel__value" id="hiscore">0</div>
-          </div>
-        </aside>
+      <div class="hud">
+        <div class="box box--hold">
+          <div class="box__label">HOLD</div>
+          <canvas id="hold" width="96" height="96" aria-label="Held piece"></canvas>
+        </div>
 
         <div class="board-wrap">
           <canvas id="board" width="240" height="480" aria-label="Tetris board"></canvas>
           <div class="overlay" id="overlay">
             <div class="overlay__title" id="overlay-title">RETRO TETRIS</div>
-            <div class="overlay__text blink" id="overlay-text">PRESS ENTER OR START</div>
+            <div class="overlay__text blink" id="overlay-text">PRESS ENTER</div>
           </div>
         </div>
 
-        <aside class="panel panel--right">
-          <div class="panel__box">
-            <div class="panel__label">NEXT</div>
-            <canvas id="next" width="96" height="96" aria-label="Next piece"></canvas>
-          </div>
-          <div class="panel__box">
-            <div class="panel__label">SCORE</div>
-            <div class="panel__value" id="score">0</div>
-          </div>
-          <div class="panel__box">
-            <div class="panel__label">LEVEL</div>
-            <div class="panel__value" id="level">0</div>
-          </div>
-          <div class="panel__box">
-            <div class="panel__label">LINES</div>
-            <div class="panel__value" id="lines">0</div>
-          </div>
-        </aside>
+        <div class="box box--next">
+          <div class="box__label">NEXT</div>
+          <canvas id="next" width="96" height="96" aria-label="Next piece"></canvas>
+        </div>
+
+        <div class="box box--stats">
+          <div class="stat"><span class="box__label">SCORE</span><span class="stat__value" id="score">0</span></div>
+          <div class="stat"><span class="box__label">LEVEL</span><span class="stat__value" id="level">0</span></div>
+          <div class="stat"><span class="box__label">LINES</span><span class="stat__value" id="lines">0</span></div>
+          <div class="stat"><span class="box__label">HI</span><span class="stat__value" id="hiscore">0</span></div>
+        </div>
+
+        <div class="box box--keys" aria-label="Keyboard controls">
+          <div class="box__label">KEYS</div>
+          <dl class="keys">
+            <dt>&larr; &rarr;</dt><dd>MOVE</dd>
+            <dt>&uarr; X</dt><dd>ROTATE</dd>
+            <dt>Z</dt><dd>CCW</dd>
+            <dt>&darr;</dt><dd>SOFT</dd>
+            <dt>SPACE</dt><dd>DROP</dd>
+            <dt>C</dt><dd>HOLD</dd>
+            <dt>P</dt><dd>PAUSE</dd>
+            <dt>M</dt><dd>SOUND</dd>
+          </dl>
+        </div>
       </div>
       <div class="scanlines" aria-hidden="true"></div>
     </section>
 
     <section class="controls" aria-label="Touch controls">
       <div class="dpad">
-        <button class="btn btn--dpad btn--up" data-action="rotate" aria-label="Rotate">▲</button>
-        <button class="btn btn--dpad btn--left" data-action="left" aria-label="Move left">◀</button>
-        <button class="btn btn--dpad btn--right" data-action="right" aria-label="Move right">▶</button>
-        <button class="btn btn--dpad btn--down" data-action="down" aria-label="Soft drop">▼</button>
+        <button class="btn btn--dpad btn--up" data-action="rotate" aria-label="Rotate">&#9650;</button>
+        <button class="btn btn--dpad btn--left" data-action="left" aria-label="Move left">&#9664;</button>
+        <button class="btn btn--dpad btn--right" data-action="right" aria-label="Move right">&#9654;</button>
+        <button class="btn btn--dpad btn--down" data-action="down" aria-label="Soft drop">&#9660;</button>
       </div>
       <div class="mid-buttons">
         <button class="btn btn--pill" data-action="pause" aria-label="Pause">PAUSE</button>
@@ -77,10 +88,6 @@
         <button class="btn btn--round btn--a" data-action="drop" aria-label="Hard drop">A</button>
       </div>
     </section>
-
-    <footer class="help">
-      <span>← → MOVE</span><span>↑/X ROTATE</span><span>↓ SOFT</span><span>SPACE DROP</span><span>C HOLD</span><span>P PAUSE</span><span>M SOUND</span>
-    </footer>
   </main>
 
   <script type="module" src="src/main.js"></script>

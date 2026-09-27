@@ -1,0 +1,15 @@
+{
+  "name": "retro-tetris",
+  "version": "1.0.0",
+  "description": "Nostalgic pixel-art Tetris in vanilla JS + Canvas",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "start": "npx --yes serve -l 5173 ."
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

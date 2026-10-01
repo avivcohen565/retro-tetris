@@ -53,6 +53,7 @@ export function createAudio() {
     gameover: () => play([[392, 150], [330, 150], [262, 150], [196, 300]], { type: 'sawtooth', gain: 0.06 }),
     start: () => play([[262, 60], [330, 60], [392, 60], [523, 120]]),
     pause: () => play([[440, 60], [220, 60]]),
+    count: () => play([[660, 70]], { gain: 0.06 }),
   };
 
   function toggleMute() {

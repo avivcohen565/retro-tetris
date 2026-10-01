@@ -20,8 +20,8 @@ export const COLORS = {
 };
 
 const BG = '#0f380f';
-const GRID = '#1a4a1a';
-const GHOST = '#306230';
+const GRID = '#2b5e2b';  // LCD pixel-grid dots
+const GUIDE = '#143f14'; // faint column lines that help aim
 
 function setup(ctx) {
   ctx.imageSmoothingEnabled = false;
@@ -46,14 +46,21 @@ export function drawBlock(ctx, x, y, type, size = CELL) {
   ctx.fillRect(x + size - edge, y, edge, size);
 }
 
-function drawGhostBlock(ctx, x, y, size = CELL) {
-  const t = Math.max(2, Math.round(size / 12));
-  const inset = Math.max(1, Math.round(size / 24));
-  ctx.fillStyle = GHOST;
-  ctx.fillRect(x, y, size - inset, t);
-  ctx.fillRect(x, y + size - t - inset, size - inset, t);
-  ctx.fillRect(x, y, t, size - inset);
-  ctx.fillRect(x + size - t - inset, y, t, size - inset);
+// Landing preview: a tinted outline in the piece's own colour.
+function drawGhostBlock(ctx, x, y, type, size = CELL) {
+  const c = COLORS[type];
+  const t = Math.max(2, Math.round(size / 10));
+  const s = size - Math.max(1, Math.round(size / 24));
+  ctx.globalAlpha = 0.18;
+  ctx.fillStyle = c.base;
+  ctx.fillRect(x, y, s, s);
+  ctx.globalAlpha = 0.75;
+  ctx.fillStyle = c.light;
+  ctx.fillRect(x, y, s, t);
+  ctx.fillRect(x, y + s - t, s, t);
+  ctx.fillRect(x, y, t, s);
+  ctx.fillRect(x + s - t, y, t, s);
+  ctx.globalAlpha = 1;
 }
 
 export function drawBoard(ctx, state, { cell = CELL, flashRows = [], flashOn = false } = {}) {
@@ -65,6 +72,8 @@ export function drawBoard(ctx, state, { cell = CELL, flashRows = [], flashOn = f
 
   // faint grid dots (a nod to the DMG's LCD pixel grid)
   const dot = Math.max(1, Math.round(cell / 24));
+  ctx.fillStyle = GUIDE;
+  for (let c = 1; c < COLS; c++) ctx.fillRect(c * cell, 0, dot, h);
   ctx.fillStyle = GRID;
   for (let r = 0; r <= ROWS; r++) {
     for (let c = 0; c <= COLS; c++) ctx.fillRect(c * cell, r * cell, dot, dot);
@@ -92,7 +101,7 @@ export function drawBoard(ctx, state, { cell = CELL, flashRows = [], flashOn = f
     if (gr !== null && gr !== state.current.row) {
       for (const [r, c] of cellsOf({ ...state.current, row: gr })) {
         if (r < HIDDEN_ROWS) continue;
-        drawGhostBlock(ctx, c * cell, (r - HIDDEN_ROWS) * cell, cell);
+        drawGhostBlock(ctx, c * cell, (r - HIDDEN_ROWS) * cell, state.current.type, cell);
       }
     }
     // active piece

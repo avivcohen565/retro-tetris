@@ -19,11 +19,30 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <!-- Pixel icons (8x8 grid), reused via <use>. -->
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-left" viewBox="0 0 8 8"><path d="M2 3h1v2H2zM3 2h1v4H3zM4 1h1v6H4zM5 0h1v8H5z"/></symbol>
+    <symbol id="i-right" viewBox="0 0 8 8"><path d="M5 3h1v2H5zM4 2h1v4H4zM3 1h1v6H3zM2 0h1v8H2z"/></symbol>
+    <symbol id="i-up" viewBox="0 0 8 8"><path d="M3 2h2v1H3zM2 3h4v1H2zM1 4h6v1H1zM0 5h8v1H0z"/></symbol>
+    <symbol id="i-down" viewBox="0 0 8 8"><path d="M0 2h8v1H0zM1 3h6v1H1zM2 4h4v1H2zM3 5h2v1H3z"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 8 8"><path d="M0 3h2v2H0zM2 2h1v4H2zM3 1h1v6H3zM5 3h1v2H5zM6 1h1v1H6zM7 2h1v4H7zM6 6h1v1H6z"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 8 8"><path d="M0 3h2v2H0zM2 2h1v4H2zM3 1h1v6H3zM5 2h1v1H5zM7 2h1v1H7zM6 3h1v2H6zM5 5h1v1H5zM7 5h1v1H7z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 8 8"><path d="M1 1h2v6H1zM5 1h2v6H5z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 8 8"><path d="M2 0h1v8H2zM3 1h1v6H3zM4 2h1v4H4zM5 3h1v2H5z"/></symbol>
+  </svg>
+
   <main class="console" id="console">
     <header class="console__top">
       <h1 class="title">RETRO<span class="title__accent">TETRIS</span></h1>
       <div class="console__right">
-        <button class="mode-btn" id="mode-btn" type="button" title="Layout: auto / phone / tablet / desktop">AUTO</button>
+        <button class="icon-btn" id="sound-btn" type="button" data-action="mute" aria-label="Sound on" aria-pressed="true">
+          <svg class="icon icon--on"><use href="#i-sound"/></svg>
+          <svg class="icon icon--off"><use href="#i-mute"/></svg>
+        </button>
+        <button class="icon-btn" id="pause-btn" type="button" data-action="pause" aria-label="Pause">
+          <svg class="icon icon--on"><use href="#i-pause"/></svg>
+          <svg class="icon icon--off"><use href="#i-play"/></svg>
+        </button>
         <div class="led" aria-hidden="true"></div>
       </div>
     </header>
@@ -39,7 +58,14 @@
           <canvas id="board" width="240" height="480" aria-label="Tetris board"></canvas>
           <div class="overlay" id="overlay">
             <div class="overlay__title" id="overlay-title">RETRO TETRIS</div>
-            <div class="overlay__text blink" id="overlay-text">PRESS ENTER</div>
+            <div class="overlay__text" id="overlay-text"></div>
+            <div class="menu" id="menu">
+              <button class="menu__btn menu__btn--primary" id="menu-primary" type="button" data-menu="primary">START</button>
+              <button class="menu__btn" id="menu-restart" type="button" data-menu="restart" hidden>RESTART</button>
+              <button class="menu__btn" id="menu-sound" type="button" data-menu="sound">SOUND: ON</button>
+              <button class="menu__btn" id="menu-layout" type="button" data-menu="layout">LAYOUT: AUTO</button>
+            </div>
+            <div class="overlay__hint" id="overlay-hint"></div>
           </div>
         </div>
 
@@ -49,23 +75,23 @@
         </div>
 
         <div class="box box--stats">
-          <div class="stat"><span class="box__label">SCORE</span><span class="stat__value" id="score">0</span></div>
+          <div class="stat stat--score"><span class="box__label">SCORE</span><span class="stat__value" id="score">0</span></div>
           <div class="stat"><span class="box__label">LEVEL</span><span class="stat__value" id="level">0</span></div>
           <div class="stat"><span class="box__label">LINES</span><span class="stat__value" id="lines">0</span></div>
-          <div class="stat"><span class="box__label">HI</span><span class="stat__value" id="hiscore">0</span></div>
+          <div class="stat stat--hi"><span class="box__label">HI</span><span class="stat__value" id="hiscore">0</span></div>
         </div>
 
         <div class="box box--keys" aria-label="Keyboard controls">
           <div class="box__label">KEYS</div>
           <dl class="keys">
-            <dt>&larr; &rarr;</dt><dd>MOVE</dd>
-            <dt>&uarr; X</dt><dd>ROTATE</dd>
-            <dt>Z</dt><dd>CCW</dd>
-            <dt>&darr;</dt><dd>SOFT</dd>
-            <dt>SPACE</dt><dd>DROP</dd>
-            <dt>C</dt><dd>HOLD</dd>
-            <dt>P</dt><dd>PAUSE</dd>
-            <dt>M</dt><dd>SOUND</dd>
+            <dt><kbd><svg><use href="#i-left"/></svg></kbd><kbd><svg><use href="#i-right"/></svg></kbd></dt><dd>MOVE</dd>
+            <dt><kbd><svg><use href="#i-up"/></svg></kbd><kbd>X</kbd></dt><dd>ROT R</dd>
+            <dt><kbd>Z</kbd></dt><dd>ROT L</dd>
+            <dt><kbd><svg><use href="#i-down"/></svg></kbd></dt><dd>SOFT</dd>
+            <dt><kbd>SPACE</kbd></dt><dd>DROP</dd>
+            <dt><kbd>C</kbd></dt><dd>HOLD</dd>
+            <dt><kbd>P</kbd></dt><dd>PAUSE</dd>
+            <dt><kbd>M</kbd></dt><dd>SOUND</dd>
           </dl>
         </div>
       </div>
@@ -73,19 +99,26 @@
     </section>
 
     <section class="controls" aria-label="Touch controls">
-      <div class="dpad">
-        <button class="btn btn--dpad btn--up" data-action="rotate" aria-label="Rotate">&#9650;</button>
-        <button class="btn btn--dpad btn--left" data-action="left" aria-label="Move left">&#9664;</button>
-        <button class="btn btn--dpad btn--right" data-action="right" aria-label="Move right">&#9654;</button>
-        <button class="btn btn--dpad btn--down" data-action="down" aria-label="Soft drop">&#9660;</button>
+      <div class="dpad" id="dpad" data-dpad role="group" aria-label="Direction pad: left, right, down = soft drop, up = hard drop">
+        <span class="dpad__arm dpad__arm--up" data-dir="up"><svg><use href="#i-up"/></svg><span class="dpad__tag">DROP</span></span>
+        <span class="dpad__arm dpad__arm--left" data-dir="left"><svg><use href="#i-left"/></svg></span>
+        <span class="dpad__hub" aria-hidden="true"></span>
+        <span class="dpad__arm dpad__arm--right" data-dir="right"><svg><use href="#i-right"/></svg></span>
+        <span class="dpad__arm dpad__arm--down" data-dir="down"><svg><use href="#i-down"/></svg></span>
       </div>
       <div class="mid-buttons">
-        <button class="btn btn--pill" data-action="pause" aria-label="Pause">PAUSE</button>
-        <button class="btn btn--pill" data-action="start" aria-label="Start">START</button>
+        <button class="pill" type="button" data-action="hold">HOLD</button>
+        <button class="pill" type="button" data-action="pause">PAUSE</button>
       </div>
       <div class="ab-buttons">
-        <button class="btn btn--round" data-action="hold" aria-label="Hold">B</button>
-        <button class="btn btn--round btn--a" data-action="drop" aria-label="Hard drop">A</button>
+        <div class="ab ab--b">
+          <button class="round" type="button" data-action="rotateCCW" aria-label="Rotate left">B</button>
+          <span class="caption">ROT L</span>
+        </div>
+        <div class="ab ab--a">
+          <button class="round round--a" type="button" data-action="rotate" aria-label="Rotate right">A</button>
+          <span class="caption">ROT R</span>
+        </div>
       </div>
     </section>
   </main>

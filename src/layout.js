@@ -1,5 +1,5 @@
 // Device-specific layout: picks a mode (phone / tablet / desktop) and sizes
-// the board so it fills the available viewport comfortably in each one.
+// the board so it fills the viewport comfortably on each one.
 // Pure functions — the DOM is touched only by applyLayout().
 
 import { COLS, ROWS } from './constants.js';
@@ -15,83 +15,112 @@ export function detectMode({ width, height, touch, finePointer = false, override
   return Math.min(width, height) < 600 ? 'phone' : 'tablet';
 }
 
-// Space around the board expressed as linear constraints: the board cell must
-// satisfy cell <= (viewport - fixed) / k on each axis. `k` counts the board
-// (10 x 20 cells) plus HUD panels measured in cells; `fixed` is chrome in px
-// (header, buttons, paddings). The fit is re-checked against the real DOM by
-// main.js, so these only need to be close.
+// Each orientation lists one or more HUD arrangements. For each, the board
+// cell must satisfy cell <= (viewport - fixed) / k on both axes: `k` counts
+// the board (10 x 20 cells) plus HUD panels in cells, `fixed` is chrome in px.
+// Touch controls add dpadH x btn (portrait) or dpadW x btn + abW x ab
+// (landscape). The arrangement giving the biggest cell wins; main.js then
+// re-checks against the real DOM, so these only need to be close.
 const SPECS = {
   phone: {
-    portrait:  { fixedW: 44,  kW: 10, fixedH: 236, kH: 23.5 },
-    landscape: { fixedW: 330, kW: 17, fixedH: 76,  kH: 20 },
-    min: 12, max: 40, btn: 44, ab: 54, pad: 8, gap: 6, previewCells: 3, panelCells: 3.5,
+    min: 12, max: 40, pad: 8, gap: 6, fsMin: 8,
+    previewCells: 2.6, panelCells: 3.6,
+    btnMin: 38, btnMax: 46, btnReserve: 112, abRatio: 1.2,
+    portrait: [
+      { hud: 'strip', fixedW: 44, kW: 10, fixedH: 108, kH: 23.6, dpadH: 3 },
+      { hud: 'side', fixedW: 56, kW: 17.2, fixedH: 108, kH: 20, dpadH: 3 },
+    ],
+    landscape: [{ hud: 'side', fixedW: 100, kW: 17.2, fixedH: 56, kH: 20, dpadW: 3, abW: 1.6 }],
   },
   tablet: {
-    portrait:  { fixedW: 96,  kW: 19, fixedH: 380, kH: 20 },
-    landscape: { fixedW: 560, kW: 19, fixedH: 130, kH: 20 },
-    min: 20, max: 64, btn: 76, ab: 92, pad: 14, gap: 10, previewCells: 4, panelCells: 4.5,
+    min: 20, max: 64, pad: 14, gap: 10, fsMin: 10,
+    previewCells: 3.6, panelCells: 4.5,
+    btnMin: 56, btnMax: 80, btnReserve: 160, abRatio: 1.2,
+    portrait: [{ hud: 'side', fixedW: 96, kW: 19, fixedH: 150, kH: 20, dpadH: 3 }],
+    landscape: [{ hud: 'side', fixedW: 180, kW: 19, fixedH: 130, kH: 20, dpadW: 3, abW: 1.6 }],
   },
   desktop: {
-    portrait:  { fixedW: 96, kW: 19, fixedH: 170, kH: 20 },
-    landscape: { fixedW: 96, kW: 19, fixedH: 170, kH: 20 },
-    min: 12, max: 44, btn: 0, ab: 0, pad: 16, gap: 10, previewCells: 4, panelCells: 4.5,
+    min: 12, max: 44, pad: 16, gap: 10, fsMin: 9,
+    previewCells: 4, panelCells: 5,
+    btnMin: 0, btnMax: 0, btnReserve: 0, abRatio: 0,
+    portrait: [{ hud: 'side', fixedW: 106, kW: 20, fixedH: 150, kH: 20 }],
+    landscape: [{ hud: 'side', fixedW: 106, kW: 20, fixedH: 150, kH: 20 }],
   },
 };
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+// D-pad arm size: as big as the screen width allows (D-pad + pills + A/B in
+// one row on a portrait phone), within thumb-friendly bounds.
+function buttonSize(spec, width) {
+  if (!spec.btnMax) return 0;
+  return clamp(Math.floor((width - spec.btnReserve) / 5.4), spec.btnMin, spec.btnMax);
+}
+
 export function computeLayout(mode, width, height, dpr = 1, { maxCell = Infinity } = {}) {
   const spec = SPECS[mode] ?? SPECS.desktop;
   const orientation = width >= height ? 'landscape' : 'portrait';
-  const s = spec[orientation];
-  const byWidth = (width - s.fixedW) / s.kW;
-  const byHeight = (height - s.fixedH) / s.kH;
-  const cell = clamp(Math.floor(Math.min(byWidth, byHeight, maxCell)), spec.min, spec.max);
+  const btn = buttonSize(spec, width);
+  const ab = Math.round(btn * spec.abRatio);
+
+  let best = null;
+  for (const v of spec[orientation]) {
+    const fixedW = v.fixedW + (v.dpadW ?? 0) * btn + (v.abW ?? 0) * ab;
+    const fixedH = v.fixedH + (v.dpadH ?? 0) * btn;
+    const fit = Math.floor(Math.min((width - fixedW) / v.kW, (height - fixedH) / v.kH, maxCell));
+    if (!best || fit > best.fit) best = { hud: v.hud, fit };
+  }
+
+  const cell = clamp(best.fit, spec.min, spec.max);
   const cellPx = Math.max(1, Math.round(cell * dpr));
+  // Preview canvases must fit inside their panel (minus padding + borders).
+  const previewCss = Math.floor(Math.min(spec.previewCells * cell, spec.panelCells * cell - 1.6 * spec.gap - 7));
+  const fs = (k, extra) => Math.max(spec.fsMin + extra, Math.round(cell * k));
+
   return {
     mode,
     orientation,
+    hud: best.hud,
     cell,
     cellPx,
     dpr,
     boardWidth: COLS * cell,
     boardHeight: ROWS * cell,
-    previewCells: spec.previewCells,
+    previewCss,
+    previewPx: Math.max(1, Math.round(previewCss * dpr)),
     panelCells: spec.panelCells,
     fonts: {
-      xs: Math.max(7, Math.round(cell * 0.3)),
-      s: Math.max(8, Math.round(cell * 0.4)),
-      m: Math.max(10, Math.round(cell * 0.55)),
-      l: Math.max(12, Math.round(cell * 0.7)),
+      xs: fs(0.36, 0),
+      s: fs(0.46, 2),
+      m: fs(0.6, 4),
+      l: fs(0.78, 7),
+      btn: clamp(Math.round(cell * 0.46), 8, 22),
     },
-    btn: spec.btn,
-    ab: spec.ab,
+    btn,
+    ab,
     pad: spec.pad,
     gap: spec.gap,
   };
 }
 
-// Writes the layout into CSS custom properties and canvas sizes.
+// Writes the layout into CSS custom properties, data attributes and canvases.
 export function applyLayout(layout, { root, board, next, hold }) {
   const st = root.style;
+  const px = (v) => `${v}px`;
   root.dataset.layout = layout.mode;
   root.dataset.orientation = layout.orientation;
-  st.setProperty('--cell', `${layout.cell}px`);
+  root.dataset.hud = layout.hud;
+  st.setProperty('--cell', px(layout.cell));
   st.setProperty('--panel-cells', String(layout.panelCells));
-  st.setProperty('--fs-xs', `${layout.fonts.xs}px`);
-  st.setProperty('--fs-s', `${layout.fonts.s}px`);
-  st.setProperty('--fs-m', `${layout.fonts.m}px`);
-  st.setProperty('--fs-l', `${layout.fonts.l}px`);
-  st.setProperty('--btn', `${layout.btn}px`);
-  st.setProperty('--ab', `${layout.ab}px`);
-  st.setProperty('--pad', `${layout.pad}px`);
-  st.setProperty('--gap', `${layout.gap}px`);
+  for (const [name, size] of Object.entries(layout.fonts)) st.setProperty(`--fs-${name}`, px(size));
+  st.setProperty('--btn', px(layout.btn));
+  st.setProperty('--ab', px(layout.ab));
+  st.setProperty('--pad', px(layout.pad));
+  st.setProperty('--gap', px(layout.gap));
 
   sizeCanvas(board, COLS * layout.cellPx, ROWS * layout.cellPx, layout.boardWidth, layout.boardHeight);
-  const previewCss = layout.previewCells * layout.cell;
-  const previewPx = layout.previewCells * layout.cellPx;
-  sizeCanvas(next, previewPx, previewPx, previewCss, previewCss);
-  sizeCanvas(hold, previewPx, previewPx, previewCss, previewCss);
+  sizeCanvas(next, layout.previewPx, layout.previewPx, layout.previewCss, layout.previewCss);
+  sizeCanvas(hold, layout.previewPx, layout.previewPx, layout.previewCss, layout.previewCss);
 }
 
 function sizeCanvas(canvas, w, h, cssW, cssH) {
@@ -101,7 +130,7 @@ function sizeCanvas(canvas, w, h, cssW, cssH) {
   canvas.style.height = `${cssH}px`;
 }
 
-// Block size used inside the preview canvases.
+// Block size inside the preview canvases: an I piece spans 4/5 of the width.
 export function previewBlock(layout) {
-  return Math.max(4, Math.floor(layout.cellPx * (layout.previewCells >= 4 ? 0.75 : 0.6)));
+  return Math.max(4, Math.floor(layout.previewPx / 5));
 }

@@ -42,6 +42,7 @@ const HI_KEY = 'retro-tetris-hiscore';
 const LAYOUT_KEY = 'retro-tetris-layout';
 const FLASH_MS = 260;
 const COUNT_STEP_MS = 450; // resume countdown: 3, 2, 1
+const RESTART_GUARD_MS = 700; // taps right after game over don't restart
 
 let hiscore = 0;
 try { hiscore = Number(localStorage.getItem(HI_KEY)) || 0; } catch { /* storage unavailable */ }
@@ -53,6 +54,7 @@ let gravityAcc = 0;
 let lastTime = 0;
 let flash = null;     // { rows, until, oldBoard, landed, type } — line-clear blink
 let countdown = null; // { until, shown } — resume countdown
+let restartGuardUntil = 0;
 let layout = null;
 let layoutOverride = readLayoutOverride();
 
@@ -193,6 +195,7 @@ function showGameOver() {
   const best = game.score > 0 && game.score > bestAtStart;
   showOverlay('GAME OVER', best ? `NEW HI-SCORE!\n${game.score}` : `SCORE ${game.score}`);
   setMenu('PLAY AGAIN', { extras: false });
+  restartGuardUntil = performance.now() + RESTART_GUARD_MS;
 }
 
 function showCountdown(n) {
@@ -270,6 +273,7 @@ function cancelCountdown() {
 }
 
 function primaryAction() {
+  if (performance.now() < restartGuardUntil) return;
   if (game.status === 'ready' || game.status === 'over') beginGame();
   else if (game.status === 'paused' && !countdown) beginResume();
 }
@@ -326,6 +330,11 @@ function act(action) {
       if (game.status === 'playing') pauseGame();
       else if (countdown) cancelCountdown();
       else if (game.status === 'paused') beginResume();
+      return;
+    case 'playpause': // header button: pause while playing, otherwise start/resume
+      if (game.status === 'playing') pauseGame();
+      else if (countdown) cancelCountdown();
+      else primaryAction();
       return;
     default: break;
   }

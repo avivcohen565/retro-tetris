@@ -22,10 +22,17 @@ const hudEl = document.querySelector('.hud');
 const dpadEl = document.querySelector('.dpad');
 const midEl = document.querySelector('.mid-buttons');
 const abEl = document.querySelector('.ab-buttons');
-const modeBtn = $('mode-btn');
+const soundBtn = $('sound-btn');
+const pauseBtn = $('pause-btn');
 const overlay = $('overlay');
 const overlayTitle = $('overlay-title');
 const overlayText = $('overlay-text');
+const overlayHint = $('overlay-hint');
+const menuEl = $('menu');
+const menuPrimary = $('menu-primary');
+const menuRestart = $('menu-restart');
+const menuSound = $('menu-sound');
+const menuLayout = $('menu-layout');
 const scoreEl = $('score');
 const levelEl = $('level');
 const linesEl = $('lines');
@@ -34,16 +41,18 @@ const hiEl = $('hiscore');
 const HI_KEY = 'retro-tetris-hiscore';
 const LAYOUT_KEY = 'retro-tetris-layout';
 const FLASH_MS = 260;
+const COUNT_STEP_MS = 450; // resume countdown: 3, 2, 1
 
 let hiscore = 0;
 try { hiscore = Number(localStorage.getItem(HI_KEY)) || 0; } catch { /* storage unavailable */ }
-hiEl.textContent = String(hiscore);
 
 const audio = createAudio();
 let game = createGame();
+let bestAtStart = hiscore;
 let gravityAcc = 0;
 let lastTime = 0;
-let flash = null; // { rows, until, oldBoard, landed, type } — line-clear blink
+let flash = null;     // { rows, until, oldBoard, landed, type } — line-clear blink
+let countdown = null; // { until, shown } — resume countdown
 let layout = null;
 let layoutOverride = readLayoutOverride();
 
@@ -75,14 +84,15 @@ function viewportSize() {
   };
 }
 
-// True when the layout does not fit. Uses offset boxes (unaffected by the
-// rotated buttons' transforms, which would inflate scrollWidth/scrollHeight).
+// True when the layout does not fit. Uses offset boxes, which ignore the
+// buttons' transforms. Controls are only checked vertically: their width is
+// set from the screen width, so shrinking the board would not help them.
 function overflows() {
-  const fits = (el, parent) => el.offsetTop + el.offsetHeight <= parent.clientHeight + 1
-    && el.offsetLeft + el.offsetWidth <= parent.clientWidth + 1;
-  if (!fits(hudEl, screenEl)) return true;
+  const fitsV = (el, parent) => el.offsetTop + el.offsetHeight <= parent.clientHeight + 1;
+  const fitsH = (el, parent) => el.offsetLeft + el.offsetWidth <= parent.clientWidth + 1;
+  if (!fitsV(hudEl, screenEl) || !fitsH(hudEl, screenEl)) return true;
   for (const el of [screenEl, dpadEl, midEl, abEl]) {
-    if (el.offsetParent === consoleEl && !fits(el, consoleEl)) return true;
+    if (el.offsetParent === consoleEl && !fitsV(el, consoleEl)) return true;
   }
   const r = consoleEl.getBoundingClientRect();
   return r.bottom > window.innerHeight + 1 || r.right > window.innerWidth + 1;
@@ -99,16 +109,12 @@ function relayout() {
   const targets = { root: document.documentElement, board: boardEl, next: nextEl, hold: holdEl };
   layout = computeLayout(mode, width, height, dpr);
   applyLayout(layout, targets);
-  // The spec is an estimate; shrink until the real DOM fits the viewport.
-  for (let i = 0; i < 12 && layout.cell > 8 && overflows(); i++) {
+  for (let i = 0; i < 16 && layout.cell > 8 && overflows(); i++) {
     layout = computeLayout(mode, width, height, dpr, { maxCell: layout.cell - 1 });
     applyLayout(layout, targets);
   }
   gestures.setCell(layout.cell);
-  modeBtn.textContent = layoutOverride ? layoutOverride.toUpperCase() : `AUTO·${mode.toUpperCase()}`;
-  if (game.status === 'ready') showStartOverlay();
-  else if (game.status === 'paused') showPauseOverlay();
-  else if (game.status === 'over') showGameOverOverlay();
+  refreshScreen();
   updateHud();
   drawFrame(performance.now());
 }
@@ -130,21 +136,81 @@ function cycleLayoutOverride() {
   relayout();
 }
 
-// ---------- HUD / overlay ----------
+// ---------- Overlay menus ----------
 
-function showOverlay(title, text) {
+function refreshControls() {
+  const muted = audio.isMuted();
+  soundBtn.classList.toggle('is-off', muted);
+  soundBtn.setAttribute('aria-label', muted ? 'Sound off' : 'Sound on');
+  soundBtn.setAttribute('aria-pressed', String(!muted));
+  const playing = game.status === 'playing' && !countdown;
+  pauseBtn.classList.toggle('is-off', !playing);
+  pauseBtn.setAttribute('aria-label', playing ? 'Pause' : 'Resume');
+  menuSound.textContent = `SOUND: ${muted ? 'OFF' : 'ON'}`;
+  menuLayout.textContent = `LAYOUT: ${layoutOverride ? layoutOverride.toUpperCase() : 'AUTO'}`;
+}
+
+function showOverlay(title, text = '', hint = '') {
+  overlay.classList.remove('overlay--count');
   overlayTitle.textContent = title;
   overlayText.textContent = text;
+  overlayHint.textContent = hint;
+  overlayHint.classList.remove('blink');
   overlay.hidden = false;
+  refreshControls();
 }
 
 function hideOverlay() {
   overlay.hidden = true;
+  refreshControls();
 }
 
-const showStartOverlay = () => showOverlay('RETRO TETRIS', isTouchLayout() ? 'TAP TO START' : 'PRESS ENTER');
-const showPauseOverlay = () => showOverlay('PAUSED', isTouchLayout() ? 'TAP TO RESUME' : 'PRESS P TO RESUME');
-const showGameOverOverlay = () => showOverlay('GAME OVER', `SCORE ${game.score}  -  ${isTouchLayout() ? 'TAP TO RESTART' : 'PRESS ENTER'}`);
+function setMenu(primary, { restart = false, extras = true } = {}) {
+  menuEl.hidden = false;
+  menuPrimary.textContent = primary;
+  menuRestart.hidden = !restart;
+  menuSound.hidden = !extras;
+  menuLayout.hidden = !extras;
+}
+
+function showStartScreen() {
+  const touch = isTouchLayout();
+  showOverlay(
+    'RETRO TETRIS',
+    hiscore ? `HI-SCORE ${hiscore}` : '',
+    touch ? 'TAP: ROTATE\nSWIPE: MOVE\nFLICK: DROP' : 'PRESS ENTER',
+  );
+  overlayHint.classList.toggle('blink', !touch);
+  setMenu('START');
+}
+
+function showPauseMenu() {
+  showOverlay('PAUSED');
+  setMenu('RESUME', { restart: true });
+}
+
+function showGameOver() {
+  const best = game.score > 0 && game.score > bestAtStart;
+  showOverlay('GAME OVER', best ? `NEW HI-SCORE!\n${game.score}` : `SCORE ${game.score}`);
+  setMenu('PLAY AGAIN', { extras: false });
+}
+
+function showCountdown(n) {
+  showOverlay(String(n));
+  overlay.classList.add('overlay--count');
+  menuEl.hidden = true;
+}
+
+// Re-renders whatever screen is up (text differs between touch and keyboard).
+function refreshScreen() {
+  if (countdown) return;
+  if (game.status === 'ready') showStartScreen();
+  else if (game.status === 'paused') showPauseMenu();
+  else if (game.status === 'over') showGameOver();
+  else refreshControls();
+}
+
+// ---------- HUD ----------
 
 function updateHud() {
   scoreEl.textContent = String(game.score);
@@ -164,18 +230,64 @@ function updateHud() {
 
 function beginGame() {
   audio.resume();
+  bestAtStart = hiscore;
+  countdown = null;
   game = start(game);
   gravityAcc = 0;
   flash = null;
-  hideOverlay();
   drainEvents(game);
+  hideOverlay();
   audio.sfx.start();
   updateHud();
 }
 
+function pauseGame() {
+  if (game.status !== 'playing') return;
+  togglePause(game);
+  showPauseMenu();
+  audio.sfx.pause();
+}
+
+// Resuming counts 3-2-1 first, so thumbs can get back on the controls.
+function beginResume() {
+  if (game.status !== 'paused' || countdown) return;
+  audio.resume();
+  countdown = { until: performance.now() + COUNT_STEP_MS * 3, shown: 3 };
+  showCountdown(3);
+  audio.sfx.count();
+}
+
+function finishResume() {
+  countdown = null;
+  togglePause(game);
+  gravityAcc = 0;
+  hideOverlay();
+}
+
+function cancelCountdown() {
+  countdown = null;
+  showPauseMenu();
+}
+
+function primaryAction() {
+  if (game.status === 'ready' || game.status === 'over') beginGame();
+  else if (game.status === 'paused' && !countdown) beginResume();
+}
+
+function autoPause() {
+  if (game.status === 'playing') pauseGame();
+  else if (countdown) cancelCountdown();
+}
+
+function toggleSound() {
+  audio.toggleMute();
+  audio.resume();
+  refreshControls();
+}
+
 function handleEvents() {
   for (const ev of drainEvents(game)) {
-    if (ev === 'gameover') showGameOverOverlay();
+    if (ev === 'gameover') showGameOver();
     if (audio.sfx[ev]) audio.sfx[ev]();
   }
 }
@@ -207,26 +319,15 @@ function lockAware(fn) {
 }
 
 function act(action) {
-  if (action === 'mute') {
-    const m = audio.toggleMute();
-    overlayText.textContent = m ? 'SOUND OFF' : 'SOUND ON';
-    return;
-  }
-  if (action === 'start') {
-    if (game.status === 'ready' || game.status === 'over') beginGame();
-    else if (game.status === 'paused') { togglePause(game); hideOverlay(); }
-    return;
-  }
-  if (action === 'pause') {
-    if (game.status === 'playing') {
-      togglePause(game);
-      showPauseOverlay();
-      audio.sfx.pause();
-    } else if (game.status === 'paused') {
-      togglePause(game);
-      hideOverlay();
-    }
-    return;
+  switch (action) {
+    case 'mute': toggleSound(); return;
+    case 'start': primaryAction(); return;
+    case 'pause':
+      if (game.status === 'playing') pauseGame();
+      else if (countdown) cancelCountdown();
+      else if (game.status === 'paused') beginResume();
+      return;
+    default: break;
   }
   if (game.status !== 'playing' || flash) return;
 
@@ -244,11 +345,32 @@ function act(action) {
   updateHud();
 }
 
+// ---------- Wiring ----------
+
 const input = createInput(act);
 const gestures = createGestures({ onAction: act });
 attachTouch(boardEl, gestures);
-overlay.addEventListener('click', () => act('start'));
-modeBtn.addEventListener('click', () => { cycleLayoutOverride(); modeBtn.blur(); });
+
+overlay.addEventListener('click', (e) => {
+  if (countdown || e.target.closest('[data-menu]')) return;
+  primaryAction();
+});
+
+menuEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-menu]');
+  if (!btn) return;
+  e.stopPropagation();
+  btn.blur();
+  const kind = btn.dataset.menu;
+  if (kind === 'primary') primaryAction();
+  else if (kind === 'restart') beginGame();
+  else if (kind === 'sound') toggleSound();
+  else if (kind === 'layout') cycleLayoutOverride();
+});
+
+// Leaving the app (call, notification, tab switch) pauses the game.
+document.addEventListener('visibilitychange', () => { if (document.hidden) autoPause(); });
+window.addEventListener('pagehide', autoPause);
 window.addEventListener('resize', queueRelayout);
 window.addEventListener('orientationchange', queueRelayout);
 window.visualViewport?.addEventListener('resize', queueRelayout);
@@ -271,6 +393,20 @@ function frame(now) {
   const dt = Math.min(now - lastTime, 100);
   lastTime = now;
   input.update(now);
+
+  if (countdown) {
+    const left = countdown.until - now;
+    if (left <= 0) {
+      finishResume();
+    } else {
+      const n = Math.ceil(left / COUNT_STEP_MS);
+      if (n !== countdown.shown) {
+        countdown.shown = n;
+        overlayTitle.textContent = String(n);
+        audio.sfx.count();
+      }
+    }
+  }
 
   if (flash) {
     if (now < flash.until) {
@@ -310,7 +446,10 @@ if (new URLSearchParams(location.search).has('debug')) {
     get game() { return game; },
     set game(g) { game = g; },
     get layout() { return layout; },
+    get countdown() { return countdown; },
     act,
     relayout,
+    autoPause,
+    skipCountdown() { if (countdown) countdown.until = 0; },
   };
 }
